@@ -1,5 +1,7 @@
 <?php
 
+use yii\web\Response;
+
 $params = require __DIR__ . '/params.php';
 $db = require __DIR__ . '/db.php';
 
@@ -13,8 +15,25 @@ $config = [
     ],
     'components' => [
         'request' => [
-            // !!! insert a secret key in the following (if it is empty) - this is required by cookie validation
-            'cookieValidationKey' => 'kWOEq9DdKH2S_6QA2oQXXYoi_jG_N6U-',
+            'enableCookieValidation' => false,
+            'enableCsrfValidation' => false,
+            'parsers' => [
+                'application/json' => 'yii\web\JsonParser',
+            ],
+        ],
+        'response' => [
+            'format' => Response::FORMAT_JSON,
+            'charset' => 'UTF-8',
+            'formatters' => [
+                Response::FORMAT_JSON => [
+                    'class' => '\yii\web\JsonResponseFormatter',
+                    'prettyPrint' => YII_DEBUG,
+                ],
+            ]
+        ],
+        'currencyClient' => [
+            'class' => 'yii\httpclient\Client',
+            'baseUrl' => 'https://api.coincap.io',
         ],
         'cache' => [
             'class' => 'yii\caching\FileCache',
@@ -23,15 +42,15 @@ $config = [
             'identityClass' => 'app\models\User',
             'enableAutoLogin' => true,
         ],
-        'errorHandler' => [
-            'errorAction' => 'site/error',
-        ],
-        'mailer' => [
-            'class' => \yii\symfonymailer\Mailer::class,
-            'viewPath' => '@app/mail',
-            // send all mails to a file by default.
-            'useFileTransport' => true,
-        ],
+//        'errorHandler' => [
+//            'errorAction' => 'site/error',
+//        ],
+//        'mailer' => [
+//            'class' => \yii\symfonymailer\Mailer::class,
+//            'viewPath' => '@app/mail',
+//            // send all mails to a file by default.
+//            'useFileTransport' => true,
+//        ],
         'log' => [
             'traceLevel' => YII_DEBUG ? 3 : 0,
             'targets' => [
@@ -42,14 +61,23 @@ $config = [
             ],
         ],
         'db' => $db,
-        /*
         'urlManager' => [
             'enablePrettyUrl' => true,
+            'enableStrictParsing' => true,
             'showScriptName' => false,
             'rules' => [
+                [
+                    'pattern' => 'api/v1',
+                    'route' => 'api/rates',
+                    'verb' => 'GET',
+                ],
+                [
+                    'pattern' => 'api/v1',
+                    'route' => 'api/convert',
+                    'verb' => 'POST',
+                ],
             ],
         ],
-        */
     ],
     'params' => $params,
 ];
