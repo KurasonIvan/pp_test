@@ -7,34 +7,40 @@ use yii\base\Model;
 
 class CurrencyHelper extends Model
 {
-    public const COMMISSION_RETE = 0.02;
+    private const COMMISSION_RETE = 0.02;
     private array $data = [];
     private string $currencyFrom;
     private string $currencyTo;
     private float $currencyValue;
 
-
-    public function init()
+    private function isFiat(): bool
     {
-        $this->data = $this->getCurrencyData();
+        foreach ($this->data as $item) {
+            if ($item['symbol'] === $this->currencyTo && $item['type'] === 'fiat') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
-    public function setCurrencyFrom(string $currency)
+    private function isCurrencyExists(string $currency): bool
     {
-        $this->currencyFrom = $this->isCurrencyExists($currency) ? $currency : '';
+        $currencyData = $this->getRatesWithCommission();
+        return key_exists($currency, $currencyData);
     }
 
-    public function setCurrencyTo(string $currency)
+    private function getPureRates(): array
     {
-        $this->currencyTo = $this->isCurrencyExists($currency) ? $currency : '';
+        foreach ($this->data as $item) {
+            $data[$item['symbol']] = $item['rateUsd'];
+        }
+
+        asort($data);
+        return $data;
     }
 
-    public function setCurrencyValue(float $value)
-    {
-        $this->currencyValue = ($value >= 0.1) ? $value : 0;
-    }
-
-    private function getCurrencyData(): array
+    private function getFullCurrencyData(): array
     {
         $currencyClient = Yii::$app->currencyClient->createRequest()
             ->setMethod('GET')
@@ -42,39 +48,66 @@ class CurrencyHelper extends Model
             ->send();
 
         if ($currencyClient->isOk) {
-            $currencyData = $currencyClient->getData()['data'];
-            $data = [];
-
-            foreach ($currencyData as $item) {
-                $data[$item['symbol']] = $item['rateUsd'];
-            }
-            asort($data);
-
-            return $data;
+            return $currencyClient->getData()['data'];
         } else {
             return [];
         }
     }
 
+    private function getCrossRateWithCommission(): float
+    {
+        $currencyData = $this->getPureRates();
+        return (1 - self::COMMISSION_RETE) * $currencyData[$this->currencyFrom] / $currencyData[$this->currencyTo];
+    }
+
+    public function init()
+    {
+        $this->data = $this->getFullCurrencyData();
+    }
+
+    public function setCurrencyFrom(string $currency)
+    {
+        $normalisedCurrency = strtoupper(trim($currency));
+        $this->currencyFrom = $this->isCurrencyExists($normalisedCurrency) ? $normalisedCurrency : '';
+    }
+
+    public function setCurrencyTo(string $currency)
+    {
+        $normalisedCurrency = strtoupper(trim($currency));
+        $this->currencyTo = $this->isCurrencyExists($normalisedCurrency) ? $normalisedCurrency : '';
+    }
+
+    public function setCurrencyValue(float $value)
+    {
+        $this->currencyValue = ($value >= 0.1) ? $value : 0;
+    }
+
     public function getDataForNeedleCurrency(string $currency): array
     {
         $needleCurrencies = explode(',', $currency);
+        $currencyWith = $this->getRatesWithCommission();
         $dataForResponse = [];
 
         foreach ($needleCurrencies as $needleCurrency) {
             $needleCurrency = strtoupper(trim($needleCurrency));
             if ($this->isCurrencyExists($needleCurrency)) {
-                $dataForResponse[$needleCurrency] = $this->data[$needleCurrency];
+                $dataForResponse[$needleCurrency] = $currencyWith[$needleCurrency];
             }
         }
 
         return $dataForResponse;
     }
 
-    public function getData(): array
+    public function getRatesWithCommission(): array
     {
-        return $this->data;
+        foreach ($this->data as $item) {
+            $data[$item['symbol']] = number_format(($item['rateUsd'] * (1 + self::COMMISSION_RETE)), 10);
+        }
+
+        asort($data);
+        return $data;
     }
+
     public function setParams(array $params): bool
     {
         $this->setCurrencyFrom($params['currency_from']);
@@ -86,25 +119,20 @@ class CurrencyHelper extends Model
 
     public function getResponseForConverter(): array
     {
-        $rate = $this->getCrossRate();
-        $result = round(($rate * $this->currencyValue), 2);
+        $rate = $this->getCrossRateWithCommission();
+        $result = number_format(($rate * $this->currencyValue), ($this->isFiat()) ? 2 : 10);
 
         return [
             'currency_from' => $this->currencyFrom,
             'currency_to' => $this->currencyTo,
             'value' => $this->currencyValue,
             'converted_value' => $result,
-            'rate' => round($rate, 2)
+            'rate' => number_format($rate,($this->isFiat()) ? 2 : 10)
         ];
     }
 
-    private function getCrossRate(): float
+    public function isLoaded(): bool
     {
-        return (1 - self::COMMISSION_RETE) * $this->data[$this->currencyFrom] / $this->data[$this->currencyTo];
-    }
-
-    public function isCurrencyExists(string $currency): bool
-    {
-        return key_exists($currency, $this->data);
+        return !$this->data;
     }
 }

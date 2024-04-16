@@ -13,8 +13,26 @@ class ApiController extends Controller
     private const SUCCESS_STATUS = 'success';
     private const ERROR_STATUS = 'error';
     private const SUCCESS_CODE = '200';
+    private const UNAUTHORIZED_CODE = '403';
     private const BAD_REQUEST_CODE = '404';
     private const METHOD_NOT_ALLOWED_CODE = '405';
+
+    public function beforeAction($action)
+    {
+        $tokenFromHeaders = Yii::$app->request->headers->get('Authorization');
+        $token = 'Bearer ' . Yii::$app->params['apiToken'];
+        if ($token !== $tokenFromHeaders) {
+            Yii::$app->response->data = [
+                'status' => self::ERROR_STATUS,
+                'code' => self::UNAUTHORIZED_CODE,
+                'message' => 'Invalid token'
+            ];
+            Yii::$app->response->send();
+            return false;
+        }
+
+        return parent::beforeAction($action);
+    }
 
     public function actionRates(string $method, string $currency = null)
     {
@@ -22,15 +40,16 @@ class ApiController extends Controller
 
             $currencyHelper = new CurrencyHelper();
             $currencyHelper->init();
-            $dataForResponse = $currencyHelper->getData();
 
-            if (empty($dataForResponse)) {
+            if ($currencyHelper->isLoaded()) {
                 return $this->asJson([
                     'status' => self::ERROR_STATUS,
-                    'code' => 403,
+                    'code' => self::UNAUTHORIZED_CODE,
                     'message' => "Sorry, service is not available in your region."
                 ]);
             }
+
+            $dataForResponse = $currencyHelper->getRatesWithCommission();
 
             if (isset($currency)) {
                 $dataForResponse = $currencyHelper->getDataForNeedleCurrency($currency);
