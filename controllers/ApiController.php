@@ -45,7 +45,7 @@ class ApiController extends Controller
                 return $this->asJson([
                     'status' => self::ERROR_STATUS,
                     'code' => self::UNAUTHORIZED_CODE,
-                    'message' => "Sorry, service is not available in your region."
+                    'message' => "Sorry, service is not available."
                 ]);
             }
 
